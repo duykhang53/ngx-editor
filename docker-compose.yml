@@ -1,0 +1,38 @@
+name: ngx-editor_build
+version: '3'
+
+services:
+  ngx-editor-build:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:14
+
+        WORKDIR /ngx-editor
+
+        ADD package*.json .
+        RUN npm ci
+
+        ADD ./scripts ./scripts
+        RUN find ./scripts -type f -exec grep -qIP '\r\n' {} ';' -exec perl -pi -e 's/\r\n/\n/g' {} '+'
+
+        ADD ./angular.json ./tsconfig.json LICENSE *.md .
+        ADD ./src ./src
+
+        COPY <<EOF docker-start.sh
+        #!/bin/bash
+
+        npx ng build ngx-editor --prod && \
+          node ./scripts/postbuild.js
+        (cd dist/ngx-editor && npm pack && mv *.tgz ..)
+        echo Build complete!
+        # sleep 10000s
+        EOF
+
+        RUN sed -i -e 's/\r\n/\n/g' docker-start.sh && chmod +x docker-start.sh
+
+        CMD ./docker-start.sh
+    # deploy:
+    #   replicas: 0
+    volumes:
+      - ./dist/:/ngx-editor/dist/
